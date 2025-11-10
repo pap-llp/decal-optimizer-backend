@@ -83,24 +83,31 @@ def solve_optimal(items, target, max_time_sec=5):
 
 
 
-def find_improvements(rolls, target, best_plan):
-    """Try adding extra rolls (from existing widths) to reduce total waste."""
+def find_improvements(rolls, target, best_plan, max_extra=5):
+    """Explore multiple extra rolls (1–5) for each existing width."""
     improvements = []
-    for r in rolls:
-        test_rolls = [RollItem(width=t.width, count=t.count) for t in rolls]
-        for t in test_rolls:
-            if t.width == r.width:
-                t.count += 1
-        items = []
-        for t in test_rolls:
-            items.extend([t.width] * t.count)
-        new_plan = solve_optimal(items, target)
-        if new_plan["total_waste"] < best_plan["total_waste"]:
-            improvements.append({
-                "added": r.width,
-                "total_waste": int(new_plan["total_waste"]),
-                "bins": new_plan["bins"]
-            })
 
+    for r in rolls:
+        for extra in range(1, max_extra + 1):
+            test_rolls = [RollItem(width=t.width, count=t.count) for t in rolls]
+            for t in test_rolls:
+                if t.width == r.width:
+                    t.count += extra
+
+            items = []
+            for t in test_rolls:
+                items.extend([t.width] * t.count)
+
+            new_plan = solve_optimal(items, target)
+            if new_plan["total_waste"] < best_plan["total_waste"]:
+                improvements.append({
+                    "added_width": r.width,
+                    "extra_rolls": extra,
+                    "total_waste": int(new_plan["total_waste"]),
+                    "bins": new_plan["bins"]
+                })
+
+    # Sort by total waste ascending
     improvements.sort(key=lambda x: x["total_waste"])
     return improvements[:3]
+
