@@ -59,8 +59,10 @@ def solve_optimal(items, target, max_time_sec=5):
     for b in range(max_bins):
         solver.Add(sum(items[i] * x[i][b] for i in range(n)) <= target * y[b])
 
-    # Objective
-    solver.Minimize(sum(y[b] for b in range(max_bins)))
+    # Objective: minimize both number of bins and total waste
+total_waste_expr = solver.Sum(target * y[b] - solver.Sum(items[i] * x[i][b] for i in range(n)) for b in range(max_bins))
+solver.Minimize(1000 * solver.Sum(y[b] for b in range(max_bins)) + total_waste_expr)
+
 
     # Limit runtime to 5 seconds
     solver.SetTimeLimit(max_time_sec * 1000)
