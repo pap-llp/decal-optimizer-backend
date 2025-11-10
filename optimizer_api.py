@@ -40,41 +40,47 @@ def optimize(data: InputData):
     return {"best": best_plan, "improvements": improvements}
 
 
-def solve_optimal(items, target):
-    """Integer programming to minimize total waste."""
+def solve_optimal(items, target, max_time_sec=5):
+    """Integer programming to minimize total waste (with time limit)."""
     solver = pywraplp.Solver.CreateSolver("SCIP")
+    if not solver:
+        return {"bins": [], "total_waste": None, "error": "Solver not available"}
+
     n = len(items)
     max_bins = n
 
-    # x[i][b] = 1 if item i is in bin b
+    # Variables
     x = [[solver.BoolVar(f"x_{i}_{b}") for b in range(max_bins)] for i in range(n)]
     y = [solver.BoolVar(f"y_{b}") for b in range(max_bins)]
-    waste = solver.NumVar(0, solver.infinity(), "waste")
 
-    # Each item goes in exactly one bin
+    # Constraints
     for i in range(n):
         solver.Add(sum(x[i][b] for b in range(max_bins)) == 1)
-
-    # Bin capacity
     for b in range(max_bins):
         solver.Add(sum(items[i] * x[i][b] for i in range(n)) <= target * y[b])
 
-    # Minimize number of bins + waste proxy
+    # Objective
     solver.Minimize(sum(y[b] for b in range(max_bins)))
 
-    status = solver.Solve()
-    bins = [[] for _ in range(max_bins)]
-    used_bins = []
+    # Limit runtime to 5 seconds
+    solver.SetTimeLimit(max_time_sec * 1000)
 
-    if status == pywraplp.Solver.OPTIMAL:
-        for b in range(max_bins):
-            bin_items = [items[i] for i in range(n) if x[i][b].solution_value() > 0.5]
-            if bin_items:
-                bins[b] = bin_items
-                used_bins.append(bin_items)
+    status = solver.Solve()
+    bins, used_bins = [], []
+
+    for b in range(max_bins):
+        bin_items = [items[i] for i in range(n) if x[i][b].solution_value() > 0.5]
+        if bin_items:
+            bins.append(bin_items)
+            used_bins.append(bin_items)
 
     total_waste = sum(target - sum(b) for b in used_bins)
-    return {"bins": used_bins, "total_waste": total_waste}
+    return {
+        "bins": used_bins,
+        "total_waste": total_waste,
+        "status": "OPTIMAL" if status == pywraplp.Solver.OPTIMAL else "APPROXIMATE"
+    }
+
 
 
 def find_improvements(rolls, target, best_plan):
