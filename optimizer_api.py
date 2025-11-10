@@ -1,0 +1,90 @@
+from fastapi import FastAPI
+from pydantic import BaseModel
+from typing import List
+from ortools.linear_solver import pywraplp
+
+app = FastAPI()
+
+class RollItem(BaseModel):
+    width: int
+    count: int
+
+class InputData(BaseModel):
+    target: int
+    rolls: List[RollItem]
+
+
+@app.post("/optimize")
+def optimize(data: InputData):
+    target = data.target
+    rolls = data.rolls
+
+    # Expand rolls into individual items
+    items = []
+    for r in rolls:
+        items.extend([r.width] * r.count)
+
+    best_plan = solve_optimal(items, target)
+    improvements = find_improvements(rolls, target, best_plan)
+
+    return {"best": best_plan, "improvements": improvements}
+
+
+def solve_optimal(items, target):
+    """Integer programming to minimize total waste."""
+    solver = pywraplp.Solver.CreateSolver("SCIP")
+    n = len(items)
+    max_bins = n
+
+    # x[i][b] = 1 if item i is in bin b
+    x = [[solver.BoolVar(f"x_{i}_{b}") for b in range(max_bins)] for i in range(n)]
+    y = [solver.BoolVar(f"y_{b}") for b in range(max_bins)]
+    waste = solver.NumVar(0, solver.infinity(), "waste")
+
+    # Each item goes in exactly one bin
+    for i in range(n):
+        solver.Add(sum(x[i][b] for b in range(max_bins)) == 1)
+
+    # Bin capacity
+    for b in range(max_bins):
+        solver.Add(sum(items[i] * x[i][b] for i in range(n)) <= target * y[b])
+
+    # Minimize number of bins + waste proxy
+    solver.Minimize(sum(y[b] for b in range(max_bins)))
+
+    status = solver.Solve()
+    bins = [[] for _ in range(max_bins)]
+    used_bins = []
+
+    if status == pywraplp.Solver.OPTIMAL:
+        for b in range(max_bins):
+            bin_items = [items[i] for i in range(n) if x[i][b].solution_value() > 0.5]
+            if bin_items:
+                bins[b] = bin_items
+                used_bins.append(bin_items)
+
+    total_waste = sum(target - sum(b) for b in used_bins)
+    return {"bins": used_bins, "total_waste": total_waste}
+
+
+def find_improvements(rolls, target, best_plan):
+    """Try adding extra rolls (from existing widths) to reduce total waste."""
+    improvements = []
+    for r in rolls:
+        test_rolls = [RollItem(width=t.width, count=t.count) for t in rolls]
+        for t in test_rolls:
+            if t.width == r.width:
+                t.count += 1
+        items = []
+        for t in test_rolls:
+            items.extend([t.width] * t.count)
+        new_plan = solve_optimal(items, target)
+        if new_plan["total_waste"] < best_plan["total_waste"]:
+            improvements.append({
+                "added": r.width,
+                "total_waste": int(new_plan["total_waste"]),
+                "bins": new_plan["bins"]
+            })
+
+    improvements.sort(key=lambda x: x["total_waste"])
+    return improvements[:3]
