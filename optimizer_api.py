@@ -61,6 +61,10 @@ def solve_cp_sat(items: List[int], target: int, time_limit_s: int = 8) -> Dict:
     model = cp_model.CpModel()
     n = len(items)
     max_bins = n  # worst case: each item its own bin
+    if n > 50:
+    # fallback to fast greedy if too large for CP-SAT within 8 s
+    bins = pack_ffd(items, target)
+    return {"bins": bins, "total_waste": sum(target - sum(b) for b in bins), "status": "GREEDY"}
     big = 10000   # weight to prioritize fewer bins
 
     # x[i][b] = item i in bin b
