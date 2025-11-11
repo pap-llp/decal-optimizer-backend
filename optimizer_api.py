@@ -48,7 +48,16 @@ def optimize(data: InputData):
         "best": best_baseline,
         "improvements": improvements
     }
-
+def solve_cp_sat(items: List[int], target: int, time_limit_s: int = 8) -> Dict:
+    # ✅ Hybrid fallback: large jobs use greedy algorithm
+    if len(items) > 45:
+        bins = pack_ffd(items, target)
+        total = sum(target - sum(b) for b in bins)
+        return {
+            "bins": bins,
+            "total_waste": total,
+            "status": "GREEDY"
+        }
 
 def solve_cp_sat(items: List[int], target: int, time_limit_s: int = 8) -> Dict:
     """
