@@ -114,7 +114,7 @@ def solve_cp_sat(items: List[int], target: int, time_limit_s: int = 8) -> Dict:
     model.Minimize(big * sum(y) + total_waste)
 
     solver = cp_model.CpSolver()
-    solver.parameters.max_time_in_seconds = float(time_limit_s)
+    solver.parameters.max_time_in_seconds = 20.0
     solver.parameters.num_search_workers = 8  # use parallelism if available
 
     res = solver.Solve(model)
